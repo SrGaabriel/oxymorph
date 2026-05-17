@@ -2,6 +2,9 @@
 name = "oxymorph"
 version = "0.0.0"
 edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/SrGaabriel/oxymorph"
+authors = ["Gabriel Minatel"]
 description = "Declarative state-delta generation and application for Rust"
 
 [dependencies]
