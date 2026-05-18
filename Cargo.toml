@@ -1,10 +1,38 @@
-[package]
-name = "oxymorph"
+[workspace]
+members = ["impl"]
+
+[workspace.package]
 version = "0.0.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/SrGaabriel/oxymorph"
 authors = ["Gabriel Minatel"]
-description = "Declarative state-delta generation and application for Rust"
+
+[package]
+name = "oxymorph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
+proc-macro2 = "1.0"
+oxymorph-impl = { path = "impl" }
 
 [dependencies]
+serde.workspace = true
+serde_json.workspace = true
+oxymorph-impl.workspace = true
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+must_use_candidate = "allow"
+missing_panics_doc = "allow"
+missing_errors_doc = "allow"
+return_self_not_must_use = "allow"
+cast_possible_truncation = "allow"
