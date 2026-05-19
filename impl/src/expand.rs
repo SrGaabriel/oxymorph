@@ -7,7 +7,10 @@ use crate::attrs::{Attr, Model, ModelArgs, parse_attrs};
 pub fn expand_model(args: &ModelArgs, input: &ItemStruct) -> TokenStream {
     let mut out = emit_canonical(input);
     for variant in &args.variants {
-        let v = emit_variant(input, args, variant);
+        let v = match emit_variant(input, args, variant) {
+            Ok(v) => v,
+            Err(e) => return e.to_compile_error(),
+        };
         out.extend(v);
     }
     out
@@ -42,30 +45,30 @@ struct ModelDerives<'a> {
     de: bool,
 }
 
-fn parse_derives(attrs: &[Attribute]) -> ModelDerives<'_> {
+fn parse_derives(attrs: &[Attribute]) -> Result<ModelDerives<'_>, syn::Error> {
     let mut ser = false;
     let mut de = false;
-    let derives = attrs
-        .iter()
-        .filter(|a| a.path().is_ident("derive"))
-        .inspect(|a| {
-            a.parse_nested_meta(|m| {
-                let last = m.path.segments.last();
-                if last.is_some_and(|s| s.ident == "Serialize") {
-                    ser = true;
-                }
-                if last.is_some_and(|s| s.ident == "Deserialize") {
-                    de = true;
-                }
-                Ok(())
-            })
-            .unwrap();
-        })
-        .collect();
-    ModelDerives { derives, ser, de }
+    let mut derives = Vec::new();
+    for attr in attrs {
+        if !attr.path().is_ident("derive") {
+            continue;
+        }
+        attr.parse_nested_meta(|m| {
+            let last = m.path.segments.last();
+            if last.is_some_and(|s| s.ident == "Serialize") {
+                ser = true;
+            }
+            if last.is_some_and(|s| s.ident == "Deserialize") {
+                de = true;
+            }
+            Ok(())
+        })?;
+        derives.push(attr);
+    }
+    Ok(ModelDerives { derives, ser, de })
 }
 
-fn emit_variant(input: &ItemStruct, args: &ModelArgs, variant: &Model) -> TokenStream {
+fn emit_variant(input: &ItemStruct, args: &ModelArgs, variant: &Model) -> Result<TokenStream, syn::Error> {
     let suffix = match variant {
         Model::Delta => "Delta",
         Model::Draft => "Draft",
@@ -74,16 +77,13 @@ fn emit_variant(input: &ItemStruct, args: &ModelArgs, variant: &Model) -> TokenS
     let struct_vis = &input.vis;
     let struct_name = suffix_name(&input.ident, suffix);
     let struct_generics = &input.generics;
-    let parsed_derives = parse_derives(&input.attrs);
+    let parsed_derives = parse_derives(&input.attrs)?;
     let derives = parsed_derives.derives;
 
     let mut field_names = Vec::new();
     let mut fields = Vec::new();
     for field in &input.fields {
-        let field_attrs = match parse_attrs(field) {
-            Ok(a) => a,
-            Err(e) => return e.to_compile_error(),
-        };
+        let field_attrs = parse_attrs(field)?;
         if !field_included(variant, &field_attrs.oxymorph) {
             continue;
         }
@@ -140,7 +140,7 @@ fn emit_variant(input: &ItemStruct, args: &ModelArgs, variant: &Model) -> TokenS
         });
     }
 
-    current
+    Ok(current)
 }
 
 fn field_included(variant: &Model, attrs: &[Attr]) -> bool {

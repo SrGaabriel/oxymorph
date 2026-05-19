@@ -2,7 +2,7 @@
 members = ["impl"]
 
 [workspace.package]
-version = "0.0.0"
+version = "0.0.1"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/SrGaabriel/oxymorph"
@@ -19,6 +19,7 @@ sea-orm = "2.0.0-rc.38"
 
 [package]
 name = "oxymorph"
+description = "Attribute macro generating view, create and patch payload types from a single canonical struct."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

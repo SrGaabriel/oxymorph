@@ -1,10 +1,10 @@
 # 😵‍💫 oxymorph
 
-A Rust crate for declarative state-delta generation.
+Attribute macro generating view, create and patch payload types from a single canonical struct.
 
 ## The problem
 
-Let's say I want to write a `User` serializable struct for my API. I want to have an internal model that has all the fields, including the ones that are private (like `email`):
+Let's say I want to write a `User` serializable struct for my API. I want to have an internal model that has all the fields to send to the user when they fetch their own data:
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,7 +19,7 @@ struct User {
 }
 ```
 
-But I can't send this to anyone except the user himself! Note the `email` field. So I have to make a separate struct for the public view:
+But if someone wants to fetch another user, I don't want to send them the `email` field which should only be visible to each user themselves. So I have to make a separate struct for the view:
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,9 +60,11 @@ struct UserPatch {
 }
 ```
 
-That's a lot of boilerplate! And then you have to write the code to convert between all these structs and the code to apply the patch to the model, etc. The latter is especially annoying, because your PATCH handler has to walk each field by hand checking `if let Some(name) = patch.name { user.name = name; }`. To make things worse, the day someone adds a new field to the model, nothing breaks at compile time and you must remember to update the route handler, because you don't get a compile-time error for not checking the new field in the patch struct.
+That's a lot of boilerplate! And then you have to write the code to convert between all these structs and the code to apply the patch to the model, etc. The latter is especially annoying, because your PATCH handler has to walk each field by hand checking `if let Some(name) = patch.name { user.name = name; }`.
 
-And on top of all that, the moment a client sends `{"age": null}` you have to distinguish "clear the age" from "I don't want to patch this field", which means `Option<Option<T>>`, `#[serde(default, deserialize_with = "double_option")]` and three nested branches for each field!
+To make things worse, the day someone adds a new field to one of the 4 DTOs, you don't get a compile-time error if you forget to add it to the others or to handle it in the patch application code.
+
+And on top of all that, when a client sends `{"age": null}` you have to distinguish "clear the age" from "I don't want to patch this field", which means `Option<Option<T>>`, `#[serde(default, deserialize_with = "double_option")]` and three nested branches for each field!
 
 `oxymorph` collapses all of that into one annotation:
 
