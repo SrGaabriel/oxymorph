@@ -111,6 +111,8 @@ impl Parse for ModelArgs {
                 } else {
                     return Err(syn::Error::new(meta.span(), "expected sea_orm(...)"));
                 }
+            } else {
+                return Err(syn::Error::new(meta.span(), "unknown model argument"));
             }
         }
         if variants.is_empty() {
