@@ -1,5 +1,6 @@
 [package]
 name = "oxymorph-impl"
+description = "Proc macro implementation for the oxymorph crate."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
