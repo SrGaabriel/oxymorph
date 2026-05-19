@@ -1,4 +1,9 @@
-use syn::parse::Parse;
+use syn::{
+    Token,
+    parse::{Parse, Parser},
+    punctuated::Punctuated,
+    spanned::Spanned,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Attr {
@@ -67,5 +72,82 @@ pub(crate) fn parse_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::Error> 
             other.push(attr.clone());
         }
     }
-    Ok(FieldAttrs { oxymorph: attrs, other })
+    Ok(FieldAttrs {
+        oxymorph: attrs,
+        other,
+    })
+}
+
+pub struct ModelArgs {
+    pub variants: Vec<Model>,
+    pub sea_orm: Option<SeaOrmArgs>,
+}
+
+pub struct SeaOrmArgs {
+    pub entity: syn::Path,
+}
+
+impl Parse for ModelArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        if input.is_empty() {
+            return Err(syn::Error::new(
+                input.span(),
+                "expected at least one of: delta, draft, view",
+            ));
+        }
+        let mut variants = Vec::new();
+        let mut sea_orm = None;
+        let punctuated = Punctuated::<syn::Meta, Token![,]>::parse_terminated(input)?;
+        for meta in punctuated {
+            if meta.path().is_ident("delta") {
+                variants.push(Model::Delta);
+            } else if meta.path().is_ident("draft") {
+                variants.push(Model::Draft);
+            } else if meta.path().is_ident("view") {
+                variants.push(Model::View);
+            } else if meta.path().is_ident("sea_orm") {
+                if let syn::Meta::List(list) = meta {
+                    sea_orm = Some(SeaOrmArgs::parse.parse2(list.tokens)?);
+                } else {
+                    return Err(syn::Error::new(meta.span(), "expected sea_orm(...)"));
+                }
+            }
+        }
+        if variants.is_empty() {
+            return Err(syn::Error::new(
+                input.span(),
+                "expected at least one of: delta, draft, view",
+            ));
+        }
+        Ok(ModelArgs { variants, sea_orm })
+    }
+}
+
+impl Parse for SeaOrmArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let punctuated = Punctuated::<syn::Meta, Token![,]>::parse_terminated(input)?;
+        let mut entity = None;
+        for meta in punctuated {
+            if meta.path().is_ident("entity") {
+                if let syn::Meta::NameValue(nv) = meta {
+                    let expr: &syn::Expr = &nv.value;
+                    if let syn::Expr::Path(expr_path) = expr {
+                        entity = Some(expr_path.path.clone());
+                    } else {
+                        return Err(syn::Error::new(
+                            expr.span(),
+                            "expected identifier for entity",
+                        ));
+                    }
+                } else {
+                    return Err(syn::Error::new(meta.span(), "expected name-value pair"));
+                }
+            } else {
+                return Err(syn::Error::new(meta.span(), "unknown sea_orm argument"));
+            }
+        }
+        let entity =
+            entity.ok_or_else(|| syn::Error::new(input.span(), "missing entity argument"))?;
+        Ok(SeaOrmArgs { entity })
+    }
 }

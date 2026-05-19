@@ -8,6 +8,15 @@ license = "Apache-2.0"
 repository = "https://github.com/SrGaabriel/oxymorph"
 authors = ["Gabriel Minatel"]
 
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
+proc-macro2 = "1.0"
+oxymorph-impl = { path = "impl" }
+sea-orm = "2.0.0-rc.38"
+
 [package]
 name = "oxymorph"
 version.workspace = true
@@ -16,18 +25,19 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
-[workspace.dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-quote = "1.0"
-syn = { version = "2.0", features = ["full"] }
-proc-macro2 = "1.0"
-oxymorph-impl = { path = "impl" }
-
 [dependencies]
-serde.workspace = true
-serde_json.workspace = true
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+sea-orm = { workspace = true, optional = true }
 oxymorph-impl.workspace = true
+
+[dev-dependencies]
+sea-orm = { workspace = true }
+
+[features]
+default = ["serde"]
+serde = ["dep:serde", "dep:serde_json"]
+sea-orm = ["dep:sea-orm"]
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

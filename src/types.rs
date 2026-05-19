@@ -1,3 +1,4 @@
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -8,17 +9,19 @@ pub enum Patch<T> {
 }
 
 impl<T> Patch<T> {
-    pub fn is_absent(&self) -> bool {
+    pub const fn is_absent(&self) -> bool {
         matches!(self, Patch::Absent)
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for Patch<T> {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         T::deserialize(d).map(Patch::Set)
     }
 }
 
+#[cfg(feature = "serde")]
 impl<T: Serialize> Serialize for Patch<T> {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         match self {

@@ -1,35 +1,13 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Attribute, ItemStruct, Token, parse::Parse, punctuated::Punctuated};
+use syn::{Attribute, ItemStruct};
 
-use crate::attrs::{Attr, Model, parse_attrs};
-
-pub struct ModelArgs {
-    pub variants: Vec<Model>,
-}
-
-impl Parse for ModelArgs {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        if input.is_empty() {
-            return Ok(Self {
-                variants: vec![Model::Delta, Model::Draft, Model::View],
-            });
-        }
-        let list = Punctuated::<Model, Token![,]>::parse_terminated(input)?;
-        Ok(Self {
-            variants: list.into_iter().collect(),
-        })
-    }
-}
+use crate::attrs::{Attr, Model, ModelArgs, parse_attrs};
 
 pub fn expand_model(args: &ModelArgs, input: &ItemStruct) -> TokenStream {
     let mut out = emit_canonical(input);
     for variant in &args.variants {
-        let v = match variant {
-            Model::Delta => emit_variant(input, &Model::Delta),
-            Model::Draft => emit_variant(input, &Model::Draft),
-            Model::View => emit_variant(input, &Model::View),
-        };
+        let v = emit_variant(input, args, variant);
         out.extend(v);
     }
     out
@@ -58,14 +36,36 @@ fn emit_canonical(input: &ItemStruct) -> TokenStream {
     }
 }
 
-fn forwarded_derives(attrs: &[Attribute]) -> Vec<&Attribute> {
-    attrs
-        .iter()
-        .filter(|a| a.path().is_ident("derive"))
-        .collect()
+struct ModelDerives<'a> {
+    derives: Vec<&'a Attribute>,
+    ser: bool,
+    de: bool,
 }
 
-fn emit_variant(input: &ItemStruct, variant: &Model) -> TokenStream {
+fn parse_derives(attrs: &[Attribute]) -> ModelDerives<'_> {
+    let mut ser = false;
+    let mut de = false;
+    let derives = attrs
+        .iter()
+        .filter(|a| a.path().is_ident("derive"))
+        .inspect(|a| {
+            a.parse_nested_meta(|m| {
+                let last = m.path.segments.last();
+                if last.is_some_and(|s| s.ident == "Serialize") {
+                    ser = true;
+                }
+                if last.is_some_and(|s| s.ident == "Deserialize") {
+                    de = true;
+                }
+                Ok(())
+            })
+            .unwrap();
+        })
+        .collect();
+    ModelDerives { derives, ser, de }
+}
+
+fn emit_variant(input: &ItemStruct, args: &ModelArgs, variant: &Model) -> TokenStream {
     let suffix = match variant {
         Model::Delta => "Delta",
         Model::Draft => "Draft",
@@ -74,8 +74,10 @@ fn emit_variant(input: &ItemStruct, variant: &Model) -> TokenStream {
     let struct_vis = &input.vis;
     let struct_name = suffix_name(&input.ident, suffix);
     let struct_generics = &input.generics;
-    let derives = forwarded_derives(&input.attrs);
+    let parsed_derives = parse_derives(&input.attrs);
+    let derives = parsed_derives.derives;
 
+    let mut field_names = Vec::new();
     let mut fields = Vec::new();
     for field in &input.fields {
         let field_attrs = match parse_attrs(field) {
@@ -89,12 +91,25 @@ fn emit_variant(input: &ItemStruct, variant: &Model) -> TokenStream {
         let other = &field_attrs.other;
         let field_name = field.ident.as_ref().unwrap();
         let field_vis = &field.vis;
+        field_names.push(field_name.clone());
         match variant {
-            Model::Delta => fields.push(quote! {
-                #(#other)*
-                #[serde(default, skip_serializing_if = "::oxymorph::Patch::is_absent")]
-                #field_vis #field_name: ::oxymorph::Patch<#ty>
-            }),
+            Model::Delta => {
+                let serde_attr = match (parsed_derives.ser, parsed_derives.de) {
+                    (true, true) => {
+                        quote! { #[serde(default, skip_serializing_if = "::oxymorph::Patch::is_absent")] }
+                    }
+                    (true, false) => {
+                        quote! { #[serde(skip_serializing_if = "::oxymorph::Patch::is_absent")] }
+                    }
+                    (false, true) => quote! { #[serde(default)] },
+                    (false, false) => quote! {},
+                };
+                fields.push(quote! {
+                    #(#other)*
+                    #serde_attr
+                    #field_vis #field_name: ::oxymorph::Patch<#ty>
+                });
+            }
             Model::Draft | Model::View => fields.push(quote! {
                 #(#other)*
                 #field_vis #field_name: #ty
@@ -102,12 +117,30 @@ fn emit_variant(input: &ItemStruct, variant: &Model) -> TokenStream {
         }
     }
 
-    quote! {
+    let mut current = quote! {
         #(#derives)*
         #struct_vis struct #struct_name #struct_generics {
             #(#fields),*
         }
+    };
+    if matches!(variant, Model::Delta)
+        && let Some(sea_orm) = args.sea_orm.as_ref()
+    {
+        let sea_orm_entity_path = &sea_orm.entity;
+        current.extend(quote! {
+            impl #struct_name {
+                pub fn apply_to(self, entity: &mut #sea_orm_entity_path::ActiveModel) {
+                    #(
+                        if let ::oxymorph::Patch::Set(value) = self.#field_names {
+                            entity.#field_names = ::sea_orm::ActiveValue::Set(value.into());
+                        }
+                     )*
+                }
+            }
+        });
     }
+
+    current
 }
 
 fn field_included(variant: &Model, attrs: &[Attr]) -> bool {
