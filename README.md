@@ -72,7 +72,7 @@ And on top of all that, when a client sends `{"age": null}` you have to distingu
 use oxymorph::{Patch, model};
 use serde::{Deserialize, Serialize};
 
-#[oxymorph::model(delta, draft, view]]
+#[oxymorph::model(delta, draft, view)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct User {
     #[oxymorph(server_only)]
