@@ -75,18 +75,44 @@ use serde::{Deserialize, Serialize};
 #[oxymorph::model(delta, draft, view)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct User {
-    #[oxymorph(server_only)]
+    #[oxymorph(read_only)]
     id: i32,
-    #[oxymorph(immutable)]
+    #[oxymorph(create_only)]
     username: String,
     name: String,
-    #[oxymorph(hide(view), immutable)]
+    #[oxymorph(write_only, create_only)]
     email: String,
     bio: Option<String>,
     age: Option<u8>,
-    #[oxymorph(server_only)]
+    #[oxymorph(read_only)]
     created_at: u64,
 }
 ```
 
 You get `UserDelta` (PATCH payload), `UserDraft` (create payload) and `UserView` (read projection) generated for free with absent-vs-null distinguished at the type level via `Patch<T>`.
+
+You can also propagate attributes:
+
+```rust
+#[oxymorph::model(
+    delta(serde(deny_unknown_fields), derive(Default), name = UserUpdate),
+    draft,
+    view,
+)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]          // copied to every model
+struct User {
+    #[oxymorph(read_only)]
+    id: i32,
+
+    #[validate(length(min = 1))]            // copied to every model
+    name: String,
+
+    #[oxymorph(
+        draft(serde(default)),              // draft only
+        delta(validate(custom = "bio_ok")), // delta only
+        view(skip),                         // same as write_only
+    )]
+    bio: Option<String>,
+}
+```

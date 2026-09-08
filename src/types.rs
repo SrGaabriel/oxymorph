@@ -54,3 +54,27 @@ impl<T> From<T> for Patch<T> {
         Patch::Set(value)
     }
 }
+
+#[cfg(feature = "utoipa")]
+mod utoipa_impl {
+    use super::Patch;
+    use utoipa::openapi::{RefOr, schema::Schema};
+
+    impl<T: utoipa::__dev::ComposeSchema> utoipa::__dev::ComposeSchema for Patch<T> {
+        fn compose(schemas: Vec<RefOr<Schema>>) -> RefOr<Schema> {
+            match schemas.first() {
+                Some(schema) => schema.clone(),
+                None => T::compose(schemas),
+            }
+        }
+    }
+
+    impl<T: utoipa::ToSchema> utoipa::ToSchema for Patch<T>
+    where
+        Patch<T>: utoipa::PartialSchema,
+    {
+        fn schemas(schemas: &mut Vec<(String, RefOr<Schema>)>) {
+            T::schemas(schemas);
+        }
+    }
+}
