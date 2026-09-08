@@ -68,7 +68,11 @@ fn parse_derives(attrs: &[Attribute]) -> Result<ModelDerives<'_>, syn::Error> {
     Ok(ModelDerives { derives, ser, de })
 }
 
-fn emit_variant(input: &ItemStruct, args: &ModelArgs, variant: &Model) -> Result<TokenStream, syn::Error> {
+fn emit_variant(
+    input: &ItemStruct,
+    args: &ModelArgs,
+    variant: &Model,
+) -> Result<TokenStream, syn::Error> {
     let suffix = match variant {
         Model::Delta => "Delta",
         Model::Draft => "Draft",
@@ -128,6 +132,7 @@ fn emit_variant(input: &ItemStruct, args: &ModelArgs, variant: &Model) -> Result
     {
         let sea_orm_entity_path = &sea_orm.entity;
         current.extend(quote! {
+            #[cfg(feature="sea-orm")]
             impl #struct_name {
                 pub fn apply_to(self, entity: &mut #sea_orm_entity_path::ActiveModel) {
                     #(
